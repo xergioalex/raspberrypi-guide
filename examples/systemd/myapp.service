@@ -1,0 +1,41 @@
+# systemd unit template for a self-hosted app on the Pi.
+# Docs: docs/05-system/04-systemd.md · docs/07-services/04-web-development.md
+#
+# Install:
+#   sudo cp myapp.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now myapp
+# Logs:
+#   journalctl -u myapp -f
+
+[Unit]
+Description=My app (Node/Python/Go — adapt ExecStart)
+After=network-online.target
+Wants=network-online.target
+# If the app reads a mounted data disk, order after it:
+# Requires=mnt-data.mount
+# After=mnt-data.mount
+
+[Service]
+Type=simple
+User=myuser
+Group=myuser
+WorkingDirectory=/opt/myapp
+Environment=NODE_ENV=production
+EnvironmentFile=-/opt/myapp/.env          # '-' = optional, no error if absent
+ExecStart=/usr/bin/node server.js         # ALWAYS absolute paths
+# ExecStart=/opt/myapp/.venv/bin/gunicorn -w 2 -b 127.0.0.1:3000 app:app   # Python variant
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Hardening — comment out anything the app genuinely needs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/myapp/data
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

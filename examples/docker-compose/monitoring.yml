@@ -1,0 +1,54 @@
+# Monitoring stack — Prometheus + Grafana (+ node_exporter on each Pi)
+# Guide: docs/08-maintenance/01-monitoring.md
+#
+# Layout: /opt/monitoring/compose.yaml + ./prometheus/prometheus.yml
+#
+# On EVERY monitored Pi, run node_exporter (bare metal is fine):
+#   sudo apt install -y prometheus-node-exporter
+#   (listens on :9100)
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"                       # admin / admin (change immediately)
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-changeme}
+      - TZ=${TZ:-America/Bogota}
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+
+# prometheus/prometheus.yml starter:
+#
+# global:
+#   scrape_interval: 30s
+# scrape_configs:
+#   - job_name: prometheus
+#     static_configs:
+#       - targets: ['localhost:9090']
+#   - job_name: node
+#     static_configs:
+#       - targets:
+#           - 'pi-server.local:9100'
+#           - 'pi-media.local:9100'
+#           - 'pi-desktop.local:9100'
+#
+# Grafana: add Prometheus datasource (http://prometheus:9090),
+# import dashboard ID 1860 (Node Exporter Full).

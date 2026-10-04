@@ -1,0 +1,55 @@
+# Home Assistant (container mode) + companions
+# Guide: docs/07-services/01-home-assistant.md
+# Conventions: docs/06-docker/02-compose-patterns.md
+#
+# Layout: /opt/homeassistant/compose.yaml + ./homeassistant/config
+# HA UI: http://<pi>:8123
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    privileged: true
+    network_mode: host        # required for discovery (mDNS/SSDP)
+    volumes:
+      - ./homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      # USB Zigbee coordinator (prefer /dev/serial/by-id/ paths — stable):
+      # - /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_XXX-if00-port0:/dev/ttyUSB0
+    environment:
+      - TZ=${TZ:-America/Bogota}
+
+  # Companions replace the HAOS add-on store:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config        # put mosquitto.conf + passwd here
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt:latest
+    container_name: zigbee2mqtt
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    volumes:
+      - ./zigbee2mqtt/data:/app/data
+    devices:
+      - /dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_XXX-if00-port0:/dev/ttyUSB0
+    environment:
+      - TZ=${TZ:-America/Bogota}
+    # zigbee2mqtt data/configuration.yaml essentials:
+    #   homeassistant: true
+    #   permit_join: false            # enable only while pairing
+    #   mqtt:
+    #     base_topic: zigbee2mqtt
+    #     server: mqtt://mosquitto
+    #   serial:
+    #     port: /dev/ttyUSB0
+    #   frontend: true                 # UI on port 8081

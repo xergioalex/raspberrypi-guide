@@ -1,0 +1,93 @@
+# Media stack — Jellyfin + Sonarr + Radarr + Prowlarr + qBittorrent
+# Fleet conventions: docs/06-docker/02-compose-patterns.md
+# Media server guide: docs/07-services/02-media-server.md
+#
+# Layout on the Pi:
+#   /opt/media/compose.yaml        ← this file
+#   /opt/media/{jellyfin,sonarr,radarr,prowlarr,qbittorrent}/config
+#   /mnt/media                     ← mounted disk with: downloads/ movies/ tv/
+#
+# Start:  cd /opt/media && docker compose up -d
+# Update: docker compose pull && docker compose up -d
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    # network_mode: host           # uncomment if you need DLNA/discovery
+    ports:
+      - "8096:8096"                # bind to LAN IP prefix for LAN-only, e.g. "192.168.1.50:8096:8096"
+    environment:
+      - TZ=${TZ:-America/Bogota}
+    volumes:
+      - ./jellyfin/config:/config
+      - /mnt/media/movies:/data/movies:ro
+      - /mnt/media/tv:/data/tv:ro
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Bogota}
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbittorrent/config:/config
+      - /mnt/media/downloads:/data/downloads
+      # Wire through gluetun for VPN instead of publishing ports:
+      # network_mode: "service:gluetun"  (then remove this ports block)
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Bogota}
+    volumes:
+      - ./sonarr/config:/config
+      - /mnt/media/tv:/tv            # SAME /data-style canonical paths everywhere
+      - /mnt/media/downloads:/downloads
+    ports:
+      - "8989:8989"
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Bogota}
+    volumes:
+      - ./radarr/config:/config
+      - /mnt/media/movies:/movies
+      - /mnt/media/downloads:/downloads
+    ports:
+      - "7878:7878"
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-America/Bogota}
+    volumes:
+      - ./prowlarr/config:/config
+    ports:
+      - "9696:9696"
+
+# First-run notes:
+# - qBittorrent prints a temporary WebUI password: docker compose logs qbittorrent | grep -i password
+# - In Sonarr/Radarr: Settings → Download Clients → qBittorrent at http://qbittorrent:8080
+# - Prowlarr: add indexers, then push them to Sonarr/Radarr via Apps
